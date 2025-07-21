@@ -1,0 +1,122 @@
+#include <iostream>
+#include <map>
+#include <vector>
+#include <sstream>
+using namespace std;
+
+struct Symbol
+{
+    string label;
+    int address;
+};
+
+map<string, int> MOT = {
+    {"LOAD", 1}, {"ADD", 2}, {"STORE", 3}, {"MOVER", 4}, // IS - Imperative Statements
+    {"DS", 5},
+    {"DC", 6}, // DL - Declarative
+    {"START", 7},
+    {"END", 8} // AD - Assembler Directives
+};
+
+map<string, Symbol> SYMTAB;
+vector<string> intermediateCode;
+
+int LC = 0;
+
+void processLine(string line)
+{
+    string label, opcode, operand;
+    stringstream ss(line);
+    ss >> label;
+
+    // If label is actually an opcode (no label case)
+    if (MOT.find(label) != MOT.end())
+    {
+        opcode = label;
+        label = "";
+    }
+    else
+    {
+        ss >> opcode;
+    }
+    ss >> operand;
+
+    // Handle START
+    if (opcode == "START")
+    {
+        LC = stoi(operand);
+        intermediateCode.push_back("(AD,START) (C," + operand + ")");
+        return;
+    }
+
+    // If there is a label, add it to SYMTAB
+    if (!label.empty())
+    {
+        if (SYMTAB.find(label) == SYMTAB.end())
+        {
+            SYMTAB[label] = {label, LC};
+        }
+    }
+
+    // Imperative statement
+    if (MOT.find(opcode) != MOT.end())
+    {
+        int code = MOT[opcode];
+
+        if (opcode == "DS")
+        {
+            SYMTAB[label].address = LC;
+            LC += stoi(operand);
+            intermediateCode.push_back("(DL,DS) (C," + operand + ")");
+        }
+        else if (opcode == "DC")
+        {
+            SYMTAB[label].address = LC;
+            intermediateCode.push_back("(DL,DC) (C," + operand + ")");
+            LC++;
+        }
+        else if (opcode == "END")
+        {
+            intermediateCode.push_back("(AD,END)");
+        }
+        else
+        {
+            intermediateCode.push_back("(IS," + to_string(code) + ") " + operand);
+            LC++;
+        }
+    }
+}
+
+int main()
+{
+    vector<string> program = {
+        "START 100",
+        "LOOP LOAD A",
+        "      ADD B",
+        "      STORE C",
+        "      MOVER D",
+        "      DC 5",
+        "A     DS 1",
+        "B     DC 2",
+        "C     DS 1",
+        "      END"};
+
+    for (string line : program)
+    {
+        processLine(line);
+    }
+
+    cout << "\nSymbol Table:\n";
+    for (auto &entry : SYMTAB)
+    {
+        cout << entry.first << " -> " << entry.second.address << endl;
+    }
+
+    cout << "\nIntermediate Code:\n";
+    for (string ic : intermediateCode)
+    {
+        cout << ic << endl;
+    }
+
+    return 0;
+}
