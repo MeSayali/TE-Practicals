@@ -1,0 +1,138 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+
+using namespace std;
+
+// Calculate number of parity bits needed
+int calcParityBits(int dataLen) {
+    int r = 0;
+    while (pow(2, r) < (dataLen + r + 1)) r++;
+    return r;
+}
+
+// Insert parity bits (0s) at power of two positions
+vector<int> insertParityBits(const vector<int>& dataBits) {
+    int m = dataBits.size();
+    int r = calcParityBits(m);
+    int totalLen = m + r;
+    vector<int> code(totalLen + 1, 0);  // 1-based indexing
+
+    int j = 0;
+    for (int i = 1; i <= totalLen; i++) {
+        if ((i & (i - 1)) == 0)  // power of two: parity bit
+            code[i] = 0;
+        else
+            code[i] = dataBits[j++];
+    }
+    return code;
+}
+
+// Calculate parity bits and set them in the code
+void setParityBits(vector<int>& code) {
+    int n = code.size() - 1;
+    for (int i = 1; i <= n; i <<= 1) {
+        int parity = 0;
+        for (int j = 1; j <= n; j++) {
+            if ((j & i) == i)
+                parity ^= code[j];
+        }
+        code[i] = parity;
+    }
+}
+
+// Detect error position (0 if no error)
+int detectError(const vector<int>& code) {
+    int n = code.size() - 1;
+    int errorPos = 0;
+    for (int i = 1; i <= n; i <<= 1) {
+        int parity = 0;
+        for (int j = 1; j <= n; j++) {
+            if ((j & i) == i)
+                parity ^= code[j];
+        }
+        if (parity != 0)
+            errorPos += i;
+    }
+    return errorPos;
+}
+
+// Extract original data bits from code
+vector<int> extractDataBits(const vector<int>& code) {
+    vector<int> dataBits;
+    int n = code.size() - 1;
+    for (int i = 1; i <= n; i++) {
+        if ((i & (i - 1)) != 0)
+            dataBits.push_back(code[i]);
+    }
+    return dataBits;
+}
+
+// Convert char to bit vector of given length (7 or 8 bits)
+vector<int> charToBits(char c, int length) {
+    vector<int> bits(length);
+    for (int i = length - 1; i >= 0; i--) {
+        bits[i] = c & 1;
+        c >>= 1;
+    }
+    return bits;
+}
+
+// Convert bit vector to char
+char bitsToChar(const vector<int>& bits) {
+    char c = 0;
+    for (int bit : bits)
+        c = (c << 1) | bit;
+    return c;
+}
+
+int main() {
+    cout << "Enter a character: ";
+    char ch;
+    cin >> ch;
+
+    int length = (ch > 127) ? 8 : 7;
+    vector<int> dataBits = charToBits(ch, length);
+
+    cout << "Original bits: ";
+    for (int b : dataBits) cout << b;
+    cout << "\n";
+
+    vector<int> code = insertParityBits(dataBits);
+    setParityBits(code);
+
+    cout << "Encoded bits: ";
+    for (int i = 1; i < (int)code.size(); i++) cout << code[i];
+    cout << "\n";
+
+    // Simulate error (flip one bit)
+    cout << "Enter bit position to flip (0 for no error): ";
+    int pos;
+    cin >> pos;
+    if (pos > 0 && pos < (int)code.size()) {
+        code[pos] ^= 1;
+        cout << "Bit flipped at position " << pos << "\n";
+    }
+
+    int errorPos = detectError(code);
+    if (errorPos == 0)
+        cout << "No error detected.\n";
+    else {
+        cout << "Error detected at position " << errorPos << ". Correcting...\n";
+        code[errorPos] ^= 1;
+    }
+
+    cout << "Corrected code: ";
+    for (int i = 1; i < (int)code.size(); i++) cout << code[i];
+    cout << "\n";
+
+    vector<int> correctedData = extractDataBits(code);
+    cout << "Corrected data bits: ";
+    for (int b : correctedData) cout << b;
+    cout << "\n";
+
+    char decodedChar = bitsToChar(correctedData);
+    cout << "Decoded character: " << decodedChar << "\n";
+
+    return 0;
+}
