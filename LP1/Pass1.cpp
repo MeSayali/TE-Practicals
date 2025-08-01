@@ -5,31 +5,32 @@
 #include <vector>
 #include <string>
 #include <iomanip>
-
+using namespace std;
 struct Symbol
 {
-    std::string sym;
-    int addr = -1;
+    string sym;
+    int addr = -1; // add not yet assign
 };
 
 struct Literal
 {
-    std::string lit;
+    string lit;
     int addr = -1;
 };
 
 class Pass1
 {
-    std::unordered_map<std::string, int> OPTAB, REGTAB, CONDTAB, ADTAB;
-    std::vector<Symbol> SYMTAB;
-    std::vector<Literal> LITTAB;
+    unordered_map<std::string, int> OPTAB, REGTAB, CONDTAB, ADTAB;
+    vector<Symbol> SYMTAB;
+    vector<Literal> LITTAB;
+    vector<int> POOLTAB;
 
-    int lc = 0, litcnt = 0, proc_lit = 0;
+    int lc = 0, litcnt = 0, proc_lit = 0; // index till which literal have been assign memeory
 
 public:
     Pass1()
     {
-        initialize_OPTAB();
+        initialize_OPTAB(); // machine opcode store
         initialize_REGTAB();
         initialize_CONDTAB();
         initialize_ADTAB();
@@ -77,17 +78,17 @@ public:
         ADTAB["LTORG"] = 5;
     }
 
-    int search_symbol(const std::string &s)
+    int search_symbol(const string &s) // Find index of s in SYMTAB,
     {
         for (size_t i = 0; i < SYMTAB.size(); i++)
         {
             if (SYMTAB[i].sym == s)
                 return (int)i;
         }
-        return -1;
+        return -1; // if not found
     }
 
-    int add_symbol(const std::string &s)
+    int add_symbol(const string &s)
     {
         int idx = search_symbol(s);
         if (idx == -1)
@@ -101,17 +102,17 @@ public:
         return idx;
     }
 
-    int search_literal(const std::string &lit)
+    int search_literal(const string &lit)
     {
         for (size_t i = 0; i < LITTAB.size(); i++)
         {
             if (LITTAB[i].lit == lit)
-                return (int)i;
+                return (int)i; // if found
         }
-        return -1;
+        return -1; // not found
     }
 
-    void add_literal(const std::string &lit)
+    void add_literal(const string &lit) // add literal if not present
     {
         if (search_literal(lit) == -1)
         {
@@ -123,17 +124,30 @@ public:
         }
     }
 
-    std::vector<std::string> tokenize(const std::string &line)
+    void allocate_literals(ofstream &ft)
     {
-        std::vector<std::string> tokens;
-        std::string temp;
-        std::istringstream iss(line);
-        while (iss >> temp) // ex: ADD AREG='5' then first iteration temp=ADD, 2nd temp=AGER
+        if (proc_lit < litcnt)
+        {
+            POOLTAB.push_back(proc_lit + 1);
+        }
+        for (size_t j = proc_lit; j < litcnt; j++)
+        {
+            LITTAB[j].addr = lc;
+            lc++;
+        }
+        proc_lit = litcnt;
+    }
+    vector<string> tokenize(const string &line) // Splits a line into tokens.
+    {
+        vector<string> tokens;   // result
+        string temp;             // hold the temp tokens
+        istringstream iss(line); // spliting by space
+        while (iss >> temp)      // ex: ADD AREG='5' then first iteration temp=ADD, 2nd temp=AREG
         {
             // split tokens by comma if comma present
             size_t start = 0, pos;
 
-            while ((pos = temp.find(',', start)) != std::string::npos) // checks if temp has , in it if it does then pos has index where comma occured in AGEG, here pos=4 where comma came
+            while ((pos = temp.find(',', start)) != string::npos) // checks if temp has , in it if it does then pos has index where comma occured in AGEG, here pos=4 where comma came
             {
                 if (pos > start)                                       // true
                     tokens.push_back(temp.substr(start, pos - start)); // add operand before , means AGER therefore 4-0 = 4(End index/no.character) in substr(0,4) start from 0 take 4 character from 0
@@ -145,48 +159,37 @@ public:
         return tokens;
     }
 
-    void allocate_literals(std::ofstream &ft)
+    void pass_one(const string &filename) // main file process everthing and generate intermediate code
     {
-        // Assign addresses to literals not yet assigned
-        for (size_t j = proc_lit; j < litcnt; j++)
+        ifstream source(filename);
+        if (!source.is_open()) // open file
         {
-            LITTAB[j].addr = lc;
-            lc++;
-        }
-        proc_lit = litcnt;
-    }
-
-    void pass_one(const std::string &filename)
-    {
-        std::ifstream source(filename);
-        if (!source.is_open())
-        {
-            std::cerr << "Source file not found\n";
+            cout << "Source file not found\n";
             return;
         }
-        std::ofstream icfile("ic.txt");
+        ofstream icfile("ic.txt"); // creating a file to write IC
         if (!icfile.is_open())
         {
-            std::cerr << "Cannot create intermediate code file\n";
+            cout << "Cannot create intermediate code file\n";
             return;
         }
 
-        std::string line;
-        while (getline(source, line))
+        string line;
+        while (getline(source, line)) // read file line by line
         {
-            if (line.empty())
+            if (line.empty()) // if empty skip
                 continue;
-            std::vector<std::string> tokens = tokenize(line);
-            int n = (int)tokens.size(); // token added like ['ADD','AREG','=5']
+            vector<string> tokens = tokenize(line); // tokenizing each line
+            int n = (int)tokens.size();             // token added like ['ADD','AREG','=5']
 
-            if (n == 0)
+            if (n == 0) // if no token skip
                 continue;
 
-            if (n == 1)
+            if (n == 1) // stop ltorg end
             {
                 // Case 1: Single token instructions like STOP, END, LTORG
-                if (OPTAB.count(tokens[0]) && OPTAB[tokens[0]] == 0)
-                { // STOP
+                if (OPTAB.count(tokens[0]) && OPTAB[tokens[0]] == 0) // STOP fisrt check it is 0 or not if yes then check ==
+                {
                     icfile << "(IS,00)\n";
                     lc++;
                     continue;
@@ -194,17 +197,17 @@ public:
                 if (ADTAB.count(tokens[0]) && (ADTAB[tokens[0]] == 2 || ADTAB[tokens[0]] == 5))
                 { // END or LTORG
                     allocate_literals(icfile);
-                    icfile << "(AD," << std::setw(2) << std::setfill('0') << ADTAB[tokens[0]] << ")\n";
+                    icfile << "(AD," << setw(2) << setfill('0') << ADTAB[tokens[0]] << ")\n";
                     continue;
                 }
             }
-            else if (n == 2)
+            else if (n == 2) // START 100
             {
                 // Two token instructions
                 if (ADTAB.count(tokens[0]) && (ADTAB[tokens[0]] == 1 || ADTAB[tokens[0]] == 3))
                 { // START or ORIGIN
                     lc = stoi(tokens[1]);
-                    icfile << "(AD," << std::setw(2) << std::setfill('0') << ADTAB[tokens[0]] << ") (C," << tokens[1] << ")\n";
+                    icfile << "(AD," << setw(2) << setfill('0') << ADTAB[tokens[0]] << ") (C," << tokens[1] << ")\n";
                     continue;
                 }
                 if (OPTAB.count(tokens[0]) && (OPTAB[tokens[0]] == 9 || OPTAB[tokens[0]] == 10))
@@ -212,9 +215,9 @@ public:
                     int p = search_symbol(tokens[1]);
                     if (p == -1)
                     {
-                        p = add_symbol(tokens[1]);
+                        p = add_symbol(tokens[1]); // check for symbol table
                     }
-                    icfile << "(IS," << std::setw(2) << std::setfill('0') << OPTAB[tokens[0]] << ") (S," << std::setw(2) << std::setfill('0') << (p + 1) << ")\n";
+                    icfile << "(IS," << setw(2) << setfill('0') << OPTAB[tokens[0]] << ") (S," << setw(2) << setfill('0') << (p + 1) << ")\n";
                     lc++;
                     continue;
                 }
@@ -242,14 +245,14 @@ public:
                     {                                                                     // Literal
                         std::string lit = tokens[2].substr(2, tokens[2].length() - 3);    //='52' substr(2-> skip =,' start from 5, token.length=5-3(since skip =,',')) therefore substr(2,2) from 5 take 2 character including 5
                         add_literal(lit);
-                        icfile << "(IS," << std::setw(2) << std::setfill('0') << OPTAB[tokens[0]] << ") (" << k << ")(L," << std::setw(2) << std::setfill('0') << litcnt << ")\n";
+                        icfile << "(IS," << setw(2) << setfill('0') << OPTAB[tokens[0]] << ") (" << k << ")(L," << setw(2) << setfill('0') << litcnt << ")\n";
                     }
                     else
                     { // Symbol
                         int p = search_symbol(tokens[2]);
                         if (p == -1)
                             p = add_symbol(tokens[2]);
-                        icfile << "(IS," << std::setw(2) << std::setfill('0') << OPTAB[tokens[0]] << ") (" << k << ")(S," << std::setw(2) << std::setfill('0') << (p + 1) << ")\n";
+                        icfile << "(IS," << setw(2) << setfill('0') << OPTAB[tokens[0]] << ") (" << k << ")(S," << setw(2) << setfill('0') << (p + 1) << ")\n";
                     }
                     continue;
                 }
@@ -300,14 +303,14 @@ public:
                     {
                         std::string lit = tokens[3].substr(2, tokens[3].length() - 3);
                         add_literal(lit);
-                        icfile << "(IS," << std::setw(2) << std::setfill('0') << OPTAB[tokens[1]] << ") (" << k << ")(L," << std::setw(2) << std::setfill('0') << litcnt << ")\n";
+                        icfile << "(IS," << setw(2) << setfill('0') << OPTAB[tokens[1]] << ") (" << k << ")(L," << setw(2) << setfill('0') << litcnt << ")\n";
                     }
                     else
                     {
                         int q = search_symbol(tokens[3]);
                         if (q == -1)
                             q = add_symbol(tokens[3]);
-                        icfile << "(IS," << std::setw(2) << std::setfill('0') << OPTAB[tokens[1]] << ") (" << k << ")(S," << std::setw(2) << std::setfill('0') << (q + 1) << ")\n";
+                        icfile << "(IS," << setw(2) << setfill('0') << OPTAB[tokens[1]] << ") (" << k << ")(S," << setw(2) << setfill('0') << (q + 1) << ")\n";
                     }
                 }
             }
@@ -323,53 +326,65 @@ public:
         print_symbol_table();
         print_literal_table();
         print_intermediate_code();
+        print_pool_table();
     }
 
-    void print_source(const std::string &filename)
+    void print_source(const string &filename)
     {
-        std::ifstream src(filename);
-        std::cout << "Source code:\n";
-        std::string line;
+        ifstream src(filename);
+        cout << "Source code:\n";
+        string line;
         while (getline(src, line))
         {
-            std::cout << line << "\n";
+            cout << line << "\n";
         }
-        std::cout << "\n";
+        cout << "\n";
         src.close();
     }
 
     void print_symbol_table()
     {
-        std::cout << "Symbol Table:\n";
-        std::cout << std::setw(10) << "Symbol" << std::setw(10) << "Address\n";
+        cout << "Symbol Table:\n";
+        cout << setw(10) << "Symbol" << setw(10) << "Address\n";
         for (const auto &sym : SYMTAB)
         {
-            std::cout << std::setw(10) << sym.sym << std::setw(10) << sym.addr << "\n";
+            cout << setw(10) << sym.sym << setw(10) << sym.addr << "\n";
         }
         std::cout << "\n";
     }
 
     void print_literal_table()
     {
-        std::cout << "Literal Table:\n";
-        std::cout << std::setw(10) << "Literal" << std::setw(10) << "Address\n";
+        cout << "Literal Table:\n";
+        cout << setw(10) << "Literal" << setw(10) << "Address\n";
         for (const auto &lit : LITTAB)
         {
-            std::cout << std::setw(10) << lit.lit << std::setw(10) << lit.addr << "\n";
+            cout << setw(10) << lit.lit << setw(10) << lit.addr << "\n";
         }
-        std::cout << "\n";
+        cout << "\n";
+    }
+
+    void print_pool_table()
+    {
+        cout << "Pool Table:\n";
+        cout << (10) << "Index\n";
+        for (auto idx : POOLTAB)
+        {
+            cout << setw(10) << idx << "\n";
+        }
+        cout << "\n";
     }
 
     void print_intermediate_code()
     {
-        std::ifstream icfile("ic.txt");
-        std::cout << "Intermediate Code:\n";
-        std::string line;
+        ifstream icfile("ic.txt");
+        cout << "Intermediate Code:\n";
+        string line;
         while (getline(icfile, line))
         {
-            std::cout << line << "\n";
+            cout << line << "\n";
         }
-        std::cout << "\n";
+        cout << "\n";
         icfile.close();
     }
 };
